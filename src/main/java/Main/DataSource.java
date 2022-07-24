@@ -1,9 +1,11 @@
 package Main;
-import Main.LoginStatus;
 
-import javax.xml.transform.Result;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 public class DataSource {
     public static final String url = "jdbc:postgresql://localhost:5432/JDBC";
@@ -20,7 +22,7 @@ public class DataSource {
             throw new RuntimeException("Unable to connect to the DB;");
         }
     }
-    public LoginStatus getAdmin(String username, String password){
+    public Optional<Admin> getAdmin(String username, String password){
         var getAdminSql = """
                 select * from admins  \
                 where username = ? and password = ?;
@@ -31,19 +33,11 @@ public class DataSource {
             var result = getAdminStatement.executeQuery();
 
             if(result.next()){
-
                 var admin = extractProperties(result);
-
-                return new LoginStatus(
-                        admin,
-                        true,
-                        "Succesfully Logined!");
+                return Optional.of(admin);
             }
             else {
-                return new LoginStatus(
-                        null,
-                        false,
-                        "Failed to Login;");
+                return Optional.empty();
             }
         }
         catch (SQLException e){
@@ -72,22 +66,29 @@ public class DataSource {
             throw new RuntimeException(e);
         }
     }
-    public void getAllAdmins(){
+    public List<Admin> getAllAdmins(){
+        List<Admin> allAdmins = new ArrayList<Admin>();
         var getAllAdminsSql = """
                 select * from admins;
                 """;
         try(var getAllAdminsStatement = this.connection.prepareStatement(getAllAdminsSql)){
             var result = getAllAdminsStatement.executeQuery();
-            while(result.next()){
-                var admin = extractProperties(result);
-                System.out.println(admin.toString());
+            try{
+                while(result.next()){
+                    var admin = extractProperties(result);
+                    allAdmins.add(admin);
+               }
+                return allAdmins;
             }
+            catch(SQLException e){
+                    throw new RuntimeException(e);
+                }
         }
         catch (SQLException e){
             throw new RuntimeException(e);
         }
     }
-    private Admin extractProperties(ResultSet result){
+    public Admin extractProperties(ResultSet result){
         try{
 
         var id = result.getString(1);
@@ -108,26 +109,12 @@ public class DataSource {
             throw new RuntimeException(e);
         }
     }
-    public String addAdmin(){
+    public String addAdmin(String firstName,String lastName, String username, String password, String nationalCode,String address){
         var insertSql = """
                 insert into admins \
                 (first_name, last_name, username, password, national_code, address)
                 values(?,?,?,?,?,?)
                 """;
-        var reader = new Scanner(System.in);
-
-        System.out.println("Please Enter First name:");
-        var firstName = reader.next();
-        System.out.println("Please Enter Last name:");
-        var lastName = reader.next();
-        System.out.println("Please Enter Username:");
-        var username = reader.next();
-        System.out.println("Please Enter Password:");
-        var password = reader.next();
-        System.out.println("Please Enter National Code:");
-        var nationalCode = reader.next();
-        System.out.println("Please Enter Address:");
-        var address = reader.next();
 
         try(var insertStatement = this.connection.prepareStatement(insertSql)){
             insertStatement.setString(1,firstName);
@@ -137,9 +124,8 @@ public class DataSource {
             insertStatement.setString(5,nationalCode);
             insertStatement.setString(6,address);
             var result = insertStatement.execute();
-            var resultString = !result ? "Successfully Added" : "Failed To Add";
 
-            return resultString;
+            return !result ? "Successfully Added" : "Failed To Add";
         }
         catch (SQLException e){
             System.out.println("Exception occured!!!");
@@ -165,7 +151,7 @@ public class DataSource {
             System.out.println("Please Enter Admin ID:");
             var id = reader.nextInt();
 
-            selectStatement.setInt(0,id);
+            selectStatement.setInt(1,id);
             var result = selectStatement.executeQuery();
 
             if(result.next()){
@@ -256,4 +242,22 @@ public class DataSource {
             System.out.println(e.getMessage());
         }
     }
+    public List<Admin> searchAdmins(String field, String value){
+       var admins = getAllAdmins();
+       List<Admin> foundAdmins = switch (field) {
+           case "first_name" ->
+                   admins.stream().filter(admin -> admin.firstName.equals(value)).collect(Collectors.toList());
+           case "last_name" ->
+                   admins.stream().filter(admin -> admin.lastName.equals(value)).collect(Collectors.toList());
+           case "username" ->
+                   admins.stream().filter(admin -> admin.userName.equals(value)).collect(Collectors.toList());
+           case "password" ->
+                   admins.stream().filter(admin -> admin.password.equals(value)).collect(Collectors.toList());
+           case "national_code" ->
+                   admins.stream().filter(admin -> admin.nationalCode.equals(value)).collect(Collectors.toList());
+           case "address" -> admins.stream().filter(admin -> admin.address.equals(value)).collect(Collectors.toList());
+           default -> new ArrayList<Admin>();
+       };
+        return foundAdmins;
+       }
 }
